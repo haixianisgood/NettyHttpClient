@@ -8,6 +8,7 @@ import annotation.param.RequestBody;
 import annotation.param.RequestParam;
 import codec.GsonCodec;
 import codec.JsonCodec;
+import exceptions.ParamTypeError;
 import io.netty.handler.codec.http.*;
 
 import java.io.File;
@@ -40,7 +41,7 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
      * @param method 被调用的方法
      * @param args 实际参数
      * @return 代理返回的对象
-     * @throws Throwable 可能出现的异常
+     * @throws Throwable 可能抛出的异常
      */
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
@@ -92,6 +93,7 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
         if(annotation instanceof Post) {
             nettyCall.httpMethod(HttpMethod.POST);
             url = url + ((Post)annotation).value();
+            //判断该post方法需要发送的是不是multipart4
             multipart(((Post) annotation).multipart());
         }
 
@@ -109,9 +111,9 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
      * @param args 参数
      * @throws Exception 解析过程中出现的异常
      */
-    private void parseArgs(Method method, Object[] args) throws Exception{
+    private void parseArgs(Method method, Object[] args) throws Throwable{
         Annotation[][] annotations = method.getParameterAnnotations();
-        String url = requestUrl.get();
+        StringBuilder url = new StringBuilder(requestUrl.get());
         for(int i = 0 ; i < args.length; i++) {
             if(annotations[i].length == 0) {
                 continue;
@@ -132,29 +134,34 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
 
             if(annotation instanceof PathVariable) {
                 String var = ((PathVariable)annotation).value();
-                url = url.replace("{"+var+"}", ((String) args[i]));
+                url = new StringBuilder(url.toString().replace("{" + var + "}", ((String) args[i])));
             }
 
             if(annotation instanceof RequestParam) {
                 String var = ((RequestParam)annotation).value();
-                url = url + var + "=" + args[i].toString() + "&";
+                url.append(var).append("=").append(args[i].toString()).append("&");
             }
 
             if(annotation instanceof Multipart) {
                 String name = ((Multipart)annotation).value();
-                File file = (File) args[i];
-                nettyCall.addMultipart(name, file);
+                try {
+                    File file = (File) args[i];
+                    nettyCall.addMultipart(name, file);
+                } catch (ClassCastException e) {
+                    throw new ParamTypeError("The parameter is not \"File\" class.");
+                }
+
             }
         }
 
         if (url.lastIndexOf("&") == url.length()-1) {
-            url = url.substring(0, url.length() - 2);
+            url = new StringBuilder(url.substring(0, url.length() - 2));
         }
 
         //System.out.println("full url : "+fullUrl);
 
         //添加路径变量、请求参数后的完整的HTTP请求的URL
-        nettyCall.url(url);
+        nettyCall.url(url.toString());
     }
 
     /**

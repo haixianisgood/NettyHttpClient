@@ -22,7 +22,6 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.lang.reflect.Type;
 import java.net.MalformedURLException;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
@@ -85,26 +84,29 @@ public class NettyRequest<T> implements Request<T> {
         doRequest(httpRequest);
     }
 
+    /**
+     * 构建HTTP请求
+     * @return netty的FullHttpRequest对象，用于承载HTTP报文
+     */
     private FullHttpRequest buildRequest() {
         FullHttpRequest httpRequest;
-        try {
-            //URI uri = new URI(url.toString());
-            httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_0, httpMethod, url.getPath());
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
+        httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_0, httpMethod, url.getPath());
 
+        //添加请求首部
         httpRequest.headers().add(headers);
 
+        //判断是否是multipart，再采取不同的操作
         if(isMultipart) {
             String contentType = String.format("multipart/form-data;boundary=%s", multipartBoundary);
             httpRequest.headers().add(HttpHeaderNames.CONTENT_TYPE, contentType);
             //httpRequest.headers().add(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
+
+            //写入multipart文件
             for(MultipartFile file : multipartFiles) {
                 writeFile(httpRequest.content(), file);
             }
 
+            //写入序列化对象
             for(MultipartBody body : multipartBodies) {
                 writeBody(httpRequest.content(), body);
             }
@@ -112,6 +114,8 @@ public class NettyRequest<T> implements Request<T> {
             httpRequest.content().writeBytes(content);
             httpRequest.headers().add(HttpHeaderNames.CONTENT_TYPE, HttpHeaderValues.APPLICATION_JSON);
         }
+
+        //在首部填入content的长度
         httpRequest.headers().add(HttpHeaderNames.CONTENT_LENGTH, httpRequest.content().readableBytes());
 
         System.out.println(httpRequest);
@@ -143,17 +147,25 @@ public class NettyRequest<T> implements Request<T> {
         //System.out.println(httpRequest.content().toString(StandardCharsets.UTF_8));
     }
 
+    /**
+     * 把文件写入到http请求的content中
+     * @param content netty的ByteBuf，用于存放经过编码后的byte的报文
+     * @param file 自定义的文件类，包含有需要写入content的文件
+     */
     private void writeFile(ByteBuf content, MultipartFile file) {
+        //需要写入到content中的固定内容
         String boundaryStart = "--"+multipartBoundary+"\r\n";
         String boundaryEnd = "\r\n--"+multipartBoundary+"--"+"\r\n";
         String contentDisposition = String.format("Content-Disposition:form-data;name=\"%s\";filename=\"%s\"\r\n",
                 file.getName(), file.getFile().getName());
         String contentType = String.format("Content-Type:%s\r\n", file.getType());
 
+        //执行写入
         content.writeCharSequence(boundaryStart, StandardCharsets.UTF_8);
         content.writeCharSequence(contentDisposition, StandardCharsets.UTF_8);
         content.writeCharSequence(contentType, StandardCharsets.UTF_8);
         content.writeCharSequence("\r\n", StandardCharsets.UTF_8);
+        //写入二进制文件
         try {
             FileInputStream inputStream = new FileInputStream(file.getFile());
             FileChannel fileChannel = inputStream.getChannel();
@@ -163,15 +175,23 @@ public class NettyRequest<T> implements Request<T> {
         } catch (IOException e) {
             e.printStackTrace();
         }
+        //写入末尾分隔符
         content.writeCharSequence(boundaryEnd, StandardCharsets.UTF_8);
     }
 
+    /**
+     * 把序列化后对象写入到content中
+     * @param content netty的ByteBuf，用于存放经过编码后的byte的报文
+     * @param body 经过封装后的需要发送的序列化对象
+     */
     private void writeBody(ByteBuf content, MultipartBody body) {
+        //需要写入到content中的固定内容
         String boundaryStart = "--"+multipartBoundary+"\r\n";
         String boundaryEnd = "\r\n--"+multipartBoundary+"--"+"\r\n";
         String contentDisposition = String.format("Content-Disposition:form-data;name=\"%s\"\r\n", body.getName());
         String contentType = String.format("Content-Type:%s\r\n", "application/json");
 
+        //执行写入操作
         content.writeCharSequence(boundaryStart, StandardCharsets.UTF_8);
         content.writeCharSequence(contentDisposition, StandardCharsets.UTF_8);
         content.writeCharSequence(contentType, StandardCharsets.UTF_8);
@@ -179,9 +199,10 @@ public class NettyRequest<T> implements Request<T> {
         content.writeCharSequence(body.getJson(), StandardCharsets.UTF_8);
         content.writeCharSequence(boundaryEnd, StandardCharsets.UTF_8);
     }
+
     /**
-     * 把回调添加到handler中，当收到回复时，会执行回调
-     * @param callback 对于结果的回调
+     * 创建ChannelInitialize，把回调添加到handler中，当收到回复时，会执行回调
+     * @param callback 对结果的回调
      */
     protected void channelInitializer(HttpCallback<T> callback) {
         this.httpCallback = callback;
@@ -227,9 +248,6 @@ public class NettyRequest<T> implements Request<T> {
 
     //设置content
     protected NettyRequest<T> content(String json) {
-        /*byte[] buf = new byte[content.readableBytes()];
-        content.readBytes(buf);
-        System.out.println("byte buf content "+new String(buf, StandardCharsets.UTF_8));*/
         this.content.writeCharSequence(json, StandardCharsets.UTF_8);
         return this;
     }
@@ -265,6 +283,10 @@ public class NettyRequest<T> implements Request<T> {
         this.isMultipart = isMultipart;
         return this;
     }
+
+    /**
+     * 对发送的文件的封装类
+     */
     @Data
     @AllArgsConstructor
     @NoArgsConstructor
@@ -280,6 +302,9 @@ public class NettyRequest<T> implements Request<T> {
         }
     }
 
+    /**
+     * 对请求实体对象序列化的封装类
+     */
     @Data
     @AllArgsConstructor
     @NoArgsConstructor

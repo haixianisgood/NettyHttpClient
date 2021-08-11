@@ -2,6 +2,7 @@ package handler;
 
 import callback.HttpCallback;
 import codec.JsonCodec;
+import exceptions.HttpEncodeException;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.codec.DecoderException;
@@ -38,12 +39,13 @@ public class ResponseHandler<T> extends ChannelInboundHandlerAdapter {
 
         FullHttpResponse httpResponse = (FullHttpResponse) msg;
         try {
+            //编码失败，HTTP报文错误
             if(httpResponse.decoderResult().isFailure()) {
-                onFailed(httpResponse.status().code(), httpResponse.status().reasonPhrase(), new DecoderException());
+                onFailed(httpResponse.status().code(), httpResponse.status().reasonPhrase(), new HttpEncodeException("Http request encoding failed"));
             }
         } catch (Exception e) {
             e.printStackTrace();
-            onFailed(404, "response error", e);
+            onFailed(404, "response send error", e);
         }
 
         if(httpResponse.status().code() == 200) {

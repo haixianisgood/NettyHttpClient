@@ -28,8 +28,8 @@ public class Main {
 
     @RequestMapping("/oss")
     interface MultiService {
-        @Post("/image")
-        NettyRequest<String> upload(@Multipart File file);
+        @Post(value = "/image", multipart = true)
+        NettyRequest<String> upload(@Multipart("file") File file);
     }
 
     @Data
@@ -58,9 +58,8 @@ public class Main {
         nettyProxy.baseUrl("http://localhost:8080");
         FileService fileService = (FileService) nettyProxy.create(FileService.class);
 
-        File file = new File("C:/Users/coura/Pictures/H图5.jpg");
+        File file = new File("C:/Users/coura/Pictures/AGM1.jpg");
         System.out.println(file.getName());
-
         /*LoginModel loginModel = new LoginModel();
         loginModel.setAccount("123");
         loginModel.setPassword("123");
