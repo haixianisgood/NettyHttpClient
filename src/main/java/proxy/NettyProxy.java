@@ -1,10 +1,8 @@
 package proxy;
 
 import annotation.mapping.RequestMapping;
-import annotation.method.Delete;
-import annotation.method.Get;
-import annotation.method.Post;
-import annotation.method.Put;
+import annotation.method.*;
+import annotation.param.Multipart;
 import annotation.param.PathVariable;
 import annotation.param.RequestBody;
 import annotation.param.RequestParam;
@@ -12,6 +10,7 @@ import codec.GsonCodec;
 import codec.JsonCodec;
 import io.netty.handler.codec.http.*;
 
+import java.io.File;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 import java.util.Map;
@@ -24,8 +23,11 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
     private final HttpHeaders headers = new DefaultHttpHeaders();
     private JsonCodec codec = new GsonCodec();
     private final NettyRequest<?> nettyCall;
+    private final ThreadLocal<String> requestUrl = new InheritableThreadLocal<>();
+    private boolean isMultipart = false;
 
     public NettyProxy() {
+        requestUrl.set("");
         nettyCall = new NettyRequest<>();
         nettyCall.codec(codec)
                 .headers(headers)
@@ -51,7 +53,7 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
 
         //解析类和方法上的注解，获取URL路径
         if(method.getDeclaringClass().isAnnotationPresent(RequestMapping.class)) {
-            baseUrl = baseUrl+method.getDeclaringClass().getAnnotation(RequestMapping.class).value();
+            requestUrl.set(baseUrl+method.getDeclaringClass().getAnnotation(RequestMapping.class).value());
         } else {
             return null;
         }
@@ -59,7 +61,6 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
         //获取方法上的第一个注解，并设置请求方法
         Annotation annotation = method.getAnnotations()[0];
         parseHttpMethod(annotation);
-
 
         //设置请求参数
         try {
@@ -77,25 +78,29 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
      * @param annotation 接口方法上的注解
      */
     private void parseHttpMethod(Annotation annotation) {
+        String url = requestUrl.get();
         if(annotation instanceof Get) {
             nettyCall.httpMethod(HttpMethod.GET);
-            baseUrl = baseUrl + ((Get)annotation).value();
+            url = url + ((Get)annotation).value();
         }
 
         if(annotation instanceof Put) {
             nettyCall.httpMethod(HttpMethod.PUT);
-            baseUrl = baseUrl + ((Put)annotation).value();
+            url = url + ((Put)annotation).value();
         }
 
         if(annotation instanceof Post) {
             nettyCall.httpMethod(HttpMethod.POST);
-            baseUrl = baseUrl + ((Post)annotation).value();
+            url = url + ((Post)annotation).value();
+            multipart(((Post) annotation).multipart());
         }
 
         if(annotation instanceof Delete) {
             nettyCall.httpMethod(HttpMethod.DELETE);
-            baseUrl = baseUrl + ((Delete)annotation).value();
+            url = url + ((Delete)annotation).value();
         }
+
+        requestUrl.set(url);
     }
 
     /**
@@ -106,7 +111,8 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
      */
     private void parseArgs(Method method, Object[] args) throws Exception{
         Annotation[][] annotations = method.getParameterAnnotations();
-        for(int i = 0 ; i < annotations.length; i++) {
+        String url = requestUrl.get();
+        for(int i = 0 ; i < args.length; i++) {
             if(annotations[i].length == 0) {
                 continue;
             }
@@ -115,30 +121,40 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
 
             if(annotation instanceof RequestBody) {
                 String json = codec.encode(args[i]);
-                //System.out.println("json : "+json);
-                nettyCall.content(json);
+                if(isMultipart) {
+                    String name = ((RequestBody)annotation).value();
+                    nettyCall.addMultipart(name, json);
+                } else {
+                    //System.out.println("json : "+json);
+                    nettyCall.content(json);
+                }
             }
 
             if(annotation instanceof PathVariable) {
                 String var = ((PathVariable)annotation).value();
-                baseUrl = baseUrl.replace("{"+var+"}", ((String) args[i]));
+                url = url.replace("{"+var+"}", ((String) args[i]));
             }
 
             if(annotation instanceof RequestParam) {
                 String var = ((RequestParam)annotation).value();
-                baseUrl = baseUrl + var + "=" + args[i].toString() + "&";
+                url = url + var + "=" + args[i].toString() + "&";
+            }
+
+            if(annotation instanceof Multipart) {
+                String name = ((Multipart)annotation).value();
+                File file = (File) args[i];
+                nettyCall.addMultipart(name, file);
             }
         }
 
-        String fullUrl = baseUrl;
-        if (baseUrl.lastIndexOf("&") == baseUrl.length()-1) {
-            fullUrl = baseUrl.substring(0, baseUrl.length() - 2);
+        if (url.lastIndexOf("&") == url.length()-1) {
+            url = url.substring(0, url.length() - 2);
         }
 
         //System.out.println("full url : "+fullUrl);
 
         //添加路径变量、请求参数后的完整的HTTP请求的URL
-        nettyCall.url(fullUrl);
+        nettyCall.url(url);
     }
 
     /**
@@ -174,6 +190,12 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
         for(Map.Entry<String, String> entry : map.entrySet()) {
             headers.add(entry.getKey(), entry.getValue());
         }
+        return this;
+    }
+
+    public RequestBuilder multipart(boolean isMultipart) {
+        this.isMultipart = isMultipart;
+        nettyCall.multipart(isMultipart);
         return this;
     }
 }

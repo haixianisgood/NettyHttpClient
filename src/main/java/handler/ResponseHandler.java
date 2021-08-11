@@ -52,7 +52,7 @@ public class ResponseHandler<T> extends ChannelInboundHandlerAdapter {
             onSuccess(content);
             ctx.channel().closeFuture();
         } else {
-            onFailed(httpResponse.status().code(), httpResponse.status().reasonPhrase(), new Exception("unknown"));
+            onFailed(httpResponse.status().code(), httpResponse.status().reasonPhrase(), new Exception(httpResponse.status().reasonPhrase()));
         }
 
     }
