@@ -2,18 +2,16 @@ package proxy;
 
 import annotation.mapping.RequestMapping;
 import annotation.method.*;
-import annotation.param.Multipart;
-import annotation.param.PathVariable;
-import annotation.param.RequestBody;
-import annotation.param.RequestParam;
+import annotation.param.*;
 import codec.GsonCodec;
 import codec.JsonCodec;
-import exceptions.ParamTypeError;
+import exceptions.ParamException;
 import io.netty.handler.codec.http.*;
 
 import java.io.File;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -37,7 +35,7 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
 
     /**
      * 对实例化接口的方法的代理操作，根据注解和参数，生成一个netty HTTP请求
-     * @param proxy 代理对象
+     * @param proxy 代理，实现了InvocationHandler接口
      * @param method 被调用的方法
      * @param args 实际参数
      * @return 代理返回的对象
@@ -59,11 +57,12 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
             return null;
         }
 
-        //获取方法上的第一个注解，并设置请求方法
-        Annotation annotation = method.getAnnotations()[0];
-        parseHttpMethod(annotation);
+        //解析被调用的方法上的注解，确定请求方法
+        for (Annotation annotation : method.getAnnotations()) {
+            parseHttpMethod(annotation);
+        }
 
-        //设置请求参数
+        //设置HTTP请求相关的参数
         try {
             parseArgs(method, args);
         } catch (Exception e) {
@@ -93,8 +92,10 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
         if(annotation instanceof Post) {
             nettyCall.httpMethod(HttpMethod.POST);
             url = url + ((Post)annotation).value();
-            //判断该post方法需要发送的是不是multipart4
-            multipart(((Post) annotation).multipart());
+            //判断该post方法需要发送的是不是multipart，如果已经通过builder开启，则无视post注解的multipart
+            if(!isMultipart) {
+                multipart(((Post) annotation).multipart());
+            }
         }
 
         if(annotation instanceof Delete) {
@@ -119,8 +120,10 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
                 continue;
             }
 
+            //HTTP请求相关的参数只能有一个注解
             Annotation annotation = annotations[i][0];
 
+            //请求参数序列化作为请求体
             if(annotation instanceof RequestBody) {
                 String json = codec.encode(args[i]);
                 if(isMultipart) {
@@ -132,35 +135,57 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
                 }
             }
 
+            //路径参数
             if(annotation instanceof PathVariable) {
                 String var = ((PathVariable)annotation).value();
                 url = new StringBuilder(url.toString().replace("{" + var + "}", ((String) args[i])));
             }
 
+            //请求参数
             if(annotation instanceof RequestParam) {
                 String var = ((RequestParam)annotation).value();
                 url.append(var).append("=").append(args[i].toString()).append("&");
             }
 
-            if(annotation instanceof Multipart) {
-                String name = ((Multipart)annotation).value();
+            //上传一个文件
+            if(annotation instanceof Upload) {
+                String name = ((Upload)annotation).value();
                 try {
-                    File file = (File) args[i];
+                    File file = (java.io.File) args[i];
                     nettyCall.addMultipart(name, file);
                 } catch (ClassCastException e) {
-                    throw new ParamTypeError("The parameter is not \"File\" class.");
+                    throw new ParamException("The parameter is not \"File\" class.");
                 }
+            }
 
+            //上传一个或多个文件
+            if(annotation instanceof Uploads) {
+                String[] name = ((Uploads)annotation).value();
+                File[] files = (File[]) args[i];
+                //直接上传，参数名为空
+                if (name.length == 0) {
+                    for (File file : files) {
+                        nettyCall.addMultipart(file);
+                    }
+                } else {
+                    if(name.length < files.length) {
+                        throw new ParamException("missing parameters");
+                    }
+                    for (int j = 0; j < name.length; j++) {
+                        nettyCall.addMultipart(name[i], files[i]);
+                    }
+                }
             }
         }
 
+        //修饰添加请求参数后的URL字符串
         if (url.lastIndexOf("&") == url.length()-1) {
             url = new StringBuilder(url.substring(0, url.length() - 2));
         }
 
         //System.out.println("full url : "+fullUrl);
 
-        //添加路径变量、请求参数后的完整的HTTP请求的URL
+        //添加路径变量、请求参数后的完整的HTTP请求的URL字符串
         nettyCall.url(url.toString());
     }
 
@@ -200,6 +225,7 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
         return this;
     }
 
+    @Override
     public RequestBuilder multipart(boolean isMultipart) {
         this.isMultipart = isMultipart;
         nettyCall.multipart(isMultipart);

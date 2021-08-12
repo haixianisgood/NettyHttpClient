@@ -8,6 +8,6 @@ import java.lang.annotation.*;
 /**
  * 把被注解的文件写入到content中，用于注解文件“File”
  */
-public @interface Multipart {
+public @interface Upload {
     String value() default "";
 }

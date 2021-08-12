@@ -56,7 +56,7 @@ public class ResponseHandler<T> extends ChannelInboundHandlerAdapter {
         } else {
             onFailed(httpResponse.status().code(), httpResponse.status().reasonPhrase(), new Exception(httpResponse.status().reasonPhrase()));
         }
-
+        httpResponse.content().release();
     }
 
     /**

@@ -2,7 +2,7 @@ package test;
 
 
 import annotation.mapping.RequestMapping;
-import annotation.param.Multipart;
+import annotation.param.Upload;
 import annotation.method.Post;
 import annotation.param.RequestBody;
 import callback.HttpCallback;
@@ -10,8 +10,6 @@ import lombok.Data;
 import org.junit.Test;
 import proxy.NettyProxy;
 import proxy.NettyRequest;
-
-import java.io.File;
 
 public class Main {
     public static void main(String[] args) {
@@ -29,7 +27,7 @@ public class Main {
     @RequestMapping("/oss")
     interface MultiService {
         @Post(value = "/image", multipart = true)
-        NettyRequest<String> upload(@Multipart("file") File file);
+        NettyRequest<String> upload(@Upload("file") java.io.File file);
     }
 
     @Data
@@ -58,7 +56,7 @@ public class Main {
         nettyProxy.baseUrl("http://localhost:8080");
         FileService fileService = (FileService) nettyProxy.create(FileService.class);
 
-        File file = new File("C:/Users/coura/Pictures/AGM1.jpg");
+        java.io.File file = new java.io.File("C:/Users/coura/Pictures/AGM森蚺2.jpg");
         System.out.println(file.getName());
         /*LoginModel loginModel = new LoginModel();
         loginModel.setAccount("123");

@@ -74,7 +74,6 @@ public class NettyRequest<T> implements Request<T> {
         }
     }
 
-
     @Override
     public void requestAsync(HttpCallback<T> httpCallback) {
         channelInitializer(httpCallback);
@@ -90,7 +89,7 @@ public class NettyRequest<T> implements Request<T> {
      */
     private FullHttpRequest buildRequest() {
         FullHttpRequest httpRequest;
-        httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_0, httpMethod, url.getPath());
+        httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_0, httpMethod, url.getPath(), content);
 
         //添加请求首部
         httpRequest.headers().add(headers);
@@ -120,31 +119,6 @@ public class NettyRequest<T> implements Request<T> {
 
         System.out.println(httpRequest);
         return httpRequest;
-    }
-
-    private void buildMultipartFile(FullHttpRequest httpRequest, File file) {
-        String boundaryStart = "--"+multipartBoundary+"\r\n";
-        String boundaryEnd = "\r\n--"+multipartBoundary+"--"+"\r\n";
-        String contentDispositionLine = "Content-Disposition:form-data;"+"name=\"file\";"+"filename=\""+file.getName()+"\"\r\n";
-
-        httpRequest.content().writeCharSequence("\r\n", StandardCharsets.UTF_8);
-        httpRequest.content().writeCharSequence(boundaryStart, StandardCharsets.UTF_8);
-        httpRequest.content().writeCharSequence(contentDispositionLine, StandardCharsets.UTF_8);
-        httpRequest.content().writeCharSequence("Content-Type:image/jpeg;name="+"\""+file.getName()+"\"\r\n", StandardCharsets.UTF_8);
-        httpRequest.content().writeCharSequence("\r\n", StandardCharsets.UTF_8);
-
-        try {
-            FileInputStream inputStream = new FileInputStream(file);
-            FileChannel fileChannel = inputStream.getChannel();
-            httpRequest.content().writeBytes(fileChannel, 0, (int) file.length());
-            fileChannel.close();
-            inputStream.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        httpRequest.content().writeCharSequence(boundaryEnd, StandardCharsets.UTF_8);
-        //System.out.println(httpRequest.content().toString(StandardCharsets.UTF_8));
     }
 
     /**
