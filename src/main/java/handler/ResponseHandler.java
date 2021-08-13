@@ -23,7 +23,7 @@ public class ResponseHandler<T> extends ChannelInboundHandlerAdapter {
     private final JsonCodec codec;
 
     //响应的实际类型
-    private Type resultType;
+    private final Type resultType;
 
     public ResponseHandler(JsonCodec codec, HttpCallback<T> callback, Type resultType) {
         this.codec = codec;

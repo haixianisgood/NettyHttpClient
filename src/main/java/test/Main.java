@@ -1,6 +1,7 @@
 package test;
 
 
+import annotation.header.Header;
 import annotation.mapping.RequestMapping;
 import annotation.param.Upload;
 import annotation.method.Post;
@@ -51,7 +52,7 @@ public class Main {
         private boolean isBind;
     }
     @Test
-    public void test() {
+    public void test() throws Exception{
         NettyProxy nettyProxy = new NettyProxy();
         nettyProxy.baseUrl("http://localhost:8080");
         FileService fileService = (FileService) nettyProxy.create(FileService.class);

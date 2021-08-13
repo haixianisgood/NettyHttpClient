@@ -31,16 +31,16 @@ import java.util.List;
 public class NettyRequest<T> implements Request<T> {
     private static final String multipartBoundary = "NettyHttpClientBoundary12345678910";
     private static final EventLoopGroup loopGroup = new NioEventLoopGroup();
+
     private ChannelPipeline pipeline;
     private URL url;
     private HttpMethod httpMethod;
     private final HttpHeaders headers = new DefaultHttpHeaders();
     private ChannelInitializer<SocketChannel> initializer;
-    private ByteBuf content = PooledByteBufAllocator.DEFAULT.directBuffer();
+    private final ByteBuf content = PooledByteBufAllocator.DEFAULT.directBuffer();
     private HttpCallback<T> httpCallback;
     private Type resultType;
     private JsonCodec codec = new GsonCodec();
-    private final ArrayList<File> files = new ArrayList<>();
     private final List<MultipartFile> multipartFiles = new ArrayList<>();
     private final List<MultipartBody> multipartBodies = new ArrayList<>();
     private boolean isMultipart = false;
@@ -96,6 +96,7 @@ public class NettyRequest<T> implements Request<T> {
 
         //判断是否是multipart，再采取不同的操作
         if(isMultipart) {
+            //multipart请求
             String contentType = String.format("multipart/form-data;boundary=%s", multipartBoundary);
             httpRequest.headers().add(HttpHeaderNames.CONTENT_TYPE, contentType);
             //httpRequest.headers().add(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
@@ -110,6 +111,7 @@ public class NettyRequest<T> implements Request<T> {
                 writeBody(httpRequest.content(), body);
             }
         } else {
+            //普通HTTP请求
             httpRequest.content().writeBytes(content);
             httpRequest.headers().add(HttpHeaderNames.CONTENT_TYPE, HttpHeaderValues.APPLICATION_JSON);
         }
@@ -139,7 +141,7 @@ public class NettyRequest<T> implements Request<T> {
         content.writeCharSequence(contentDisposition, StandardCharsets.UTF_8);
         content.writeCharSequence(contentType, StandardCharsets.UTF_8);
         content.writeCharSequence("\r\n", StandardCharsets.UTF_8);
-        //写入二进制文件
+        //写入文件内容
         try {
             FileInputStream inputStream = new FileInputStream(file.getFile());
             FileChannel fileChannel = inputStream.getChannel();
@@ -192,7 +194,11 @@ public class NettyRequest<T> implements Request<T> {
         };
     }
 
-    //设置URL
+    /**
+     * 设置http请求的url
+     * @param url url字符串
+     * @return NettyRequest本身，使用builder模式创建
+     */
     protected NettyRequest<T> url(String url) {
         try {
             this.url = new URL(url);
@@ -202,57 +208,104 @@ public class NettyRequest<T> implements Request<T> {
         return this;
     }
 
-    //设置请求方法
+    /**
+     * 设置请求方法
+     * @param httpMethod http请求方法
+     * @return NettyRequest本身，使用builder模式创建
+     */
     protected NettyRequest<T> httpMethod(HttpMethod httpMethod) {
         this.httpMethod = httpMethod;
         return this;
     }
 
-    //设置请求头部
+    /**
+     * 设置请求头部
+     * @param headers http请求首部
+     * @return NettyRequest本身，使用builder模式创建
+     */
     protected NettyRequest<T> headers(HttpHeaders headers) {
         this.headers.add(headers);
         return this;
     }
 
-    //设置请求头部
+    /**
+     * 设置请求头部
+     * @param key 请求首部key
+     * @param value 请求首部value
+     * @return NettyRequest本身，使用builder模式创建
+     */
     protected NettyRequest<T> header(String key, Object value) {
         this.headers.add(key, value);
         return this;
     }
 
-    //设置content
+    /**
+     * 设置content
+     * @param json 序列化后的对象
+     * @return NettyRequest本身，使用builder模式创建
+     */
     protected NettyRequest<T> content(String json) {
         this.content.writeCharSequence(json, StandardCharsets.UTF_8);
         return this;
     }
 
-    //返回content转化为对象的类型
-    protected NettyRequest<T> resultType(Type type) throws NoSuchFieldException {
+    /**
+     * 返回content转化为对象的类型
+     * @param type 被NettyRequest所包装的泛型参数的实际类型，即 T
+     * @return
+     */
+    protected NettyRequest<T> resultType(Type type) {
         this.resultType = type;
         return this;
     }
 
-    //设置编解码器
+    /**
+     * 设置编解码器
+     * @param codec 编解码器，用于对需要序列化的对象进行编解码
+     * @return NettyRequest本身，使用builder模式创建
+     */
     protected NettyRequest<T> codec(JsonCodec codec) {
         this.codec = codec;
         return this;
     }
 
-    protected NettyRequest<T> addMultipart(File file) {
-        this.files.add(file);
+    /**
+     * 添加multipart内容
+     * @param file 需要发送的文件
+     * @return NettyRequest本身，使用builder模式创建
+     */
+    protected NettyRequest addMultipart(File file) {
+        multipartFiles.add(new MultipartFile("", file));
         return this;
     }
 
+    /**
+     * 添加multipart内容
+     * @param name 参数名
+     * @param file 需要发送的文件
+     * @return NettyRequest本身，使用builder模式创建
+     */
     protected NettyRequest<T> addMultipart(String name, File file) {
         multipartFiles.add(new MultipartFile(name, file));
         return this;
     }
 
+    /**
+     * 添加multipart内容
+     * @param name 参数名
+     * @param json 需要发送的序列化后的对象
+     * @return NettyRequest本身，使用builder模式创建
+     */
     protected NettyRequest<T> addMultipart(String name, String json) {
         multipartBodies.add(new MultipartBody(name, json));
         return this;
     }
 
+    /**
+     * 开启multipart
+     * @param isMultipart true则开启multipart，默认为false
+     * @return NettyRequest本身，使用builder模式创建
+     */
     protected NettyRequest<T> multipart(boolean isMultipart) {
         this.isMultipart = isMultipart;
         return this;

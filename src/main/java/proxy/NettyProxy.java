@@ -1,17 +1,18 @@
 package proxy;
 
+import annotation.header.Header;
 import annotation.mapping.RequestMapping;
 import annotation.method.*;
 import annotation.param.*;
 import codec.GsonCodec;
 import codec.JsonCodec;
+import exceptions.NettyProxyException;
 import exceptions.ParamException;
 import io.netty.handler.codec.http.*;
 
 import java.io.File;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -21,16 +22,12 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
     private String baseUrl = "";
     private final HttpHeaders headers = new DefaultHttpHeaders();
     private JsonCodec codec = new GsonCodec();
-    private final NettyRequest<?> nettyCall;
+    private NettyRequest<?> nettyRequest;
     private final ThreadLocal<String> requestUrl = new InheritableThreadLocal<>();
     private boolean isMultipart = false;
-
+    private boolean isRegistered = false;
     public NettyProxy() {
-        requestUrl.set("");
-        nettyCall = new NettyRequest<>();
-        nettyCall.codec(codec)
-                .headers(headers)
-                .header((HttpHeaderNames.ACCEPT).toString(), "application/json");
+
     }
 
     /**
@@ -43,12 +40,20 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
      */
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        requestUrl.set("");
+
+        nettyRequest = new NettyRequest<>();
+        nettyRequest.codec(codec)
+                .headers(headers)
+                .header((HttpHeaderNames.ACCEPT).toString(), "application/json")
+                .multipart(isMultipart);
+
         //获取被调用方法的返回类型，这是统一的泛型，泛型的参数类型才是我们想要的结果的类型
         Type type = method.getGenericReturnType();
         //获取泛型返回类型的实际参数类型
         Type resultType = ((ParameterizedType)type).getActualTypeArguments()[0];
         //设置实际结果的返回类型
-        nettyCall.resultType(resultType);
+        nettyRequest.resultType(resultType);
 
         //解析类和方法上的注解，获取URL路径
         if(method.getDeclaringClass().isAnnotationPresent(RequestMapping.class)) {
@@ -57,6 +62,10 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
             return null;
         }
 
+        Annotation[] classAnnotations = method.getDeclaringClass().getAnnotations();
+        for(Annotation annotation : classAnnotations) {
+
+        }
         //解析被调用的方法上的注解，确定请求方法
         for (Annotation annotation : method.getAnnotations()) {
             parseHttpMethod(annotation);
@@ -70,7 +79,7 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
             return null;
         }
 
-        return nettyCall;
+        return nettyRequest;
     }
 
     /**
@@ -80,17 +89,17 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
     private void parseHttpMethod(Annotation annotation) {
         String url = requestUrl.get();
         if(annotation instanceof Get) {
-            nettyCall.httpMethod(HttpMethod.GET);
+            nettyRequest.httpMethod(HttpMethod.GET);
             url = url + ((Get)annotation).value();
         }
 
         if(annotation instanceof Put) {
-            nettyCall.httpMethod(HttpMethod.PUT);
+            nettyRequest.httpMethod(HttpMethod.PUT);
             url = url + ((Put)annotation).value();
         }
 
         if(annotation instanceof Post) {
-            nettyCall.httpMethod(HttpMethod.POST);
+            nettyRequest.httpMethod(HttpMethod.POST);
             url = url + ((Post)annotation).value();
             //判断该post方法需要发送的是不是multipart，如果已经通过builder开启，则无视post注解的multipart
             if(!isMultipart) {
@@ -99,8 +108,13 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
         }
 
         if(annotation instanceof Delete) {
-            nettyCall.httpMethod(HttpMethod.DELETE);
+            nettyRequest.httpMethod(HttpMethod.DELETE);
             url = url + ((Delete)annotation).value();
+        }
+
+        if(annotation instanceof Header) {
+            Header header = (Header) annotation;
+            this.header(header.key(), header.val());
         }
 
         requestUrl.set(url);
@@ -128,10 +142,10 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
                 String json = codec.encode(args[i]);
                 if(isMultipart) {
                     String name = ((RequestBody)annotation).value();
-                    nettyCall.addMultipart(name, json);
+                    nettyRequest.addMultipart(name, json);
                 } else {
                     //System.out.println("json : "+json);
-                    nettyCall.content(json);
+                    nettyRequest.content(json);
                 }
             }
 
@@ -152,7 +166,7 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
                 String name = ((Upload)annotation).value();
                 try {
                     File file = (java.io.File) args[i];
-                    nettyCall.addMultipart(name, file);
+                    nettyRequest.addMultipart(name, file);
                 } catch (ClassCastException e) {
                     throw new ParamException("The parameter is not \"File\" class.");
                 }
@@ -165,14 +179,14 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
                 //直接上传，参数名为空
                 if (name.length == 0) {
                     for (File file : files) {
-                        nettyCall.addMultipart(file);
+                        nettyRequest.addMultipart(file);
                     }
                 } else {
                     if(name.length < files.length) {
                         throw new ParamException("missing parameters");
                     }
                     for (int j = 0; j < name.length; j++) {
-                        nettyCall.addMultipart(name[i], files[i]);
+                        nettyRequest.addMultipart(name[i], files[i]);
                     }
                 }
             }
@@ -186,16 +200,23 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
         //System.out.println("full url : "+fullUrl);
 
         //添加路径变量、请求参数后的完整的HTTP请求的URL字符串
-        nettyCall.url(url.toString());
+        nettyRequest.url(url.toString());
     }
 
     /**
-     * 实例化一个HTTP请求的接口类
+     * 实例化一个HTTP请求的接口类，一个Proxy只能实例化一个接口类
      * @param type 需要实例化的接口的类型
      * @return 经处理后的代理类型，代理类型是动态生成的，JVM也不知道其实际类型，不能够进行序列化
      */
-    public Object create(Class<?> type) {
-        return Proxy.newProxyInstance(NettyProxy.class.getClassLoader(), new Class[]{type}, this);
+    public Object create(Class<?> type) throws NettyProxyException{
+        if(isRegistered) {
+            throw new NettyProxyException("This NettyProxy has been registered");
+        } else {
+            this.isRegistered = true;
+            //使用Proxy类来创建对象，能够拦截对象的方法调用
+            return Proxy.newProxyInstance(NettyProxy.class.getClassLoader(), new Class[]{type}, this);
+        }
+
     }
 
     @Override
@@ -228,7 +249,6 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
     @Override
     public RequestBuilder multipart(boolean isMultipart) {
         this.isMultipart = isMultipart;
-        nettyCall.multipart(isMultipart);
         return this;
     }
 }
