@@ -55,17 +55,14 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
         //设置实际结果的返回类型
         nettyRequest.resultType(resultType);
 
-        //解析类和方法上的注解，获取URL路径
+        //解析类的注解，获取URL路径
         if(method.getDeclaringClass().isAnnotationPresent(RequestMapping.class)) {
             requestUrl.set(baseUrl+method.getDeclaringClass().getAnnotation(RequestMapping.class).value());
         } else {
             return null;
         }
 
-        Annotation[] classAnnotations = method.getDeclaringClass().getAnnotations();
-        for(Annotation annotation : classAnnotations) {
 
-        }
         //解析被调用的方法上的注解，确定请求方法
         for (Annotation annotation : method.getAnnotations()) {
             parseHttpMethod(annotation);
@@ -209,14 +206,32 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
      * @return 经处理后的代理类型，代理类型是动态生成的，JVM也不知道其实际类型，不能够进行序列化
      */
     public Object create(Class<?> type) throws NettyProxyException{
+
         if(isRegistered) {
             throw new NettyProxyException("This NettyProxy has been registered");
         } else {
+            parseClassAnnotation(type);
             this.isRegistered = true;
             //使用Proxy类来创建对象，能够拦截对象的方法调用
             return Proxy.newProxyInstance(NettyProxy.class.getClassLoader(), new Class[]{type}, this);
         }
 
+    }
+
+    public void parseClassAnnotation(Class<?> type) {
+        //解析接口类上的请求路径注解，并添加到baseUrl中
+        if (type.isAnnotationPresent(RequestMapping.class)) {
+            this.baseUrl = this.baseUrl + type.getAnnotation(RequestMapping.class).value();
+        }
+
+        //解析接口类上的请求头部注解，并添加到headers中
+        Annotation[] classAnnotations = type.getDeclaredAnnotations();
+        for(Annotation annotation : classAnnotations) {
+            if(annotation instanceof Header) {
+                Header header = (Header) annotation;
+                this.header(header.key(), header.val());
+            }
+        }
     }
 
     @Override
