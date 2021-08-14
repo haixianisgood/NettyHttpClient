@@ -33,19 +33,18 @@ public class ResponseHandler<T> extends ChannelInboundHandlerAdapter {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         if(!(msg instanceof FullHttpResponse)) {
-            super.channelRead(ctx, msg);
+            ctx.fireChannelRead(msg);
             return;
         }
 
         FullHttpResponse httpResponse = (FullHttpResponse) msg;
-        try {
-            //编码失败，HTTP报文错误
-            if(httpResponse.decoderResult().isFailure()) {
-                onFailed(httpResponse.status().code(), httpResponse.status().reasonPhrase(), new HttpEncodeException("Http request encoding failed"));
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            onFailed(404, "response send error", e);
+        //编码失败，HTTP报文错误
+        if(httpResponse.decoderResult().isFailure()) {
+            onFailed(httpResponse.status().code(),
+                    httpResponse.status().reasonPhrase(),
+                    new HttpEncodeException("Http request encoding failed"));
+            ctx.fireChannelRead(msg);
+            return;
         }
 
         if(httpResponse.status().code() == 200) {
@@ -54,7 +53,9 @@ public class ResponseHandler<T> extends ChannelInboundHandlerAdapter {
             onSuccess(content);
             ctx.channel().closeFuture();
         } else {
-            onFailed(httpResponse.status().code(), httpResponse.status().reasonPhrase(), new Exception(httpResponse.status().reasonPhrase()));
+            onFailed(httpResponse.status().code(),
+                    httpResponse.status().reasonPhrase(),
+                    new Exception(httpResponse.status().reasonPhrase()));
         }
         httpResponse.content().release();
     }

@@ -12,7 +12,6 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.*;
-import io.netty.handler.stream.ChunkedWriteHandler;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -44,34 +43,27 @@ public class NettyRequest<T> implements Request<T> {
     private final List<MultipartFile> multipartFiles = new ArrayList<>();
     private final List<MultipartBody> multipartBodies = new ArrayList<>();
     private boolean isMultipart = false;
+
     /**
      * 解析URL，发送HTTP请求
      * @param httpRequest netty的http请求类
      */
-    public void doRequest(FullHttpRequest httpRequest) {
+    protected void doRequest(FullHttpRequest httpRequest) {
         Bootstrap bootstrap = new Bootstrap();
         bootstrap.group(loopGroup)
                 .channel(NioSocketChannel.class)
                 .handler(initializer)
                 .option(ChannelOption.SO_KEEPALIVE, true);
 
-        try {
-            ChannelFuture f = bootstrap.connect(url.getHost(), url.getPort()).addListener((ChannelFutureListener) future -> {
-                try {
-                    if (future.isSuccess()) {
-                        pipeline.writeAndFlush(httpRequest);
-                    } else {
-                        httpCallback.onFailed(404, "can not connect", new Exception("can not connect"));
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    httpCallback.onFailed(404, "connect error", e);
-                }
-            });
-            f.channel().closeFuture();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        ChannelFuture f = bootstrap.connect(url.getHost(), url.getPort())
+                .addListener((ChannelFutureListener) future -> {
+            if (future.isSuccess()) {
+                pipeline.writeAndFlush(httpRequest);
+            } else {
+                httpCallback.onFailed(404, "can not connect", new Exception("can not connect"));
+            }
+        });
+        f.channel().closeFuture();
     }
 
     @Override
@@ -103,12 +95,12 @@ public class NettyRequest<T> implements Request<T> {
 
             //写入multipart文件
             for(MultipartFile file : multipartFiles) {
-                writeFile(httpRequest.content(), file);
+                writeMultipart(httpRequest.content(), file);
             }
 
             //写入序列化对象
             for(MultipartBody body : multipartBodies) {
-                writeBody(httpRequest.content(), body);
+                writeMultipart(httpRequest.content(), body);
             }
         } else {
             //普通HTTP请求
@@ -128,7 +120,7 @@ public class NettyRequest<T> implements Request<T> {
      * @param content netty的ByteBuf，用于存放经过编码后的byte的报文
      * @param file 自定义的文件类，包含有需要写入content的文件
      */
-    private void writeFile(ByteBuf content, MultipartFile file) {
+    private void writeMultipart(ByteBuf content, MultipartFile file) {
         //需要写入到content中的固定内容
         String boundaryStart = "--"+multipartBoundary+"\r\n";
         String boundaryEnd = "\r\n--"+multipartBoundary+"--"+"\r\n";
@@ -160,7 +152,7 @@ public class NettyRequest<T> implements Request<T> {
      * @param content netty的ByteBuf，用于存放经过编码后的byte的报文
      * @param body 经过封装后的需要发送的序列化对象
      */
-    private void writeBody(ByteBuf content, MultipartBody body) {
+    private void writeMultipart(ByteBuf content, MultipartBody body) {
         //需要写入到content中的固定内容
         String boundaryStart = "--"+multipartBoundary+"\r\n";
         String boundaryEnd = "\r\n--"+multipartBoundary+"--"+"\r\n";
@@ -189,7 +181,7 @@ public class NettyRequest<T> implements Request<T> {
                 pipeline.addLast(new HttpClientCodec());
                 pipeline.addLast(new HttpObjectAggregator(2048 * 1024));
                 pipeline.addLast(new ResponseHandler<>(codec, callback, resultType));
-                pipeline.addLast(new ChunkedWriteHandler());//后续开发文件传输使用
+                //pipeline.addLast(new ChunkedWriteHandler());//后续开发大文件传输使用
             }
         };
     }
@@ -274,7 +266,7 @@ public class NettyRequest<T> implements Request<T> {
      * @param file 需要发送的文件
      * @return NettyRequest本身，使用builder模式创建
      */
-    protected NettyRequest addMultipart(File file) {
+    protected NettyRequest<T> addMultipart(File file) {
         multipartFiles.add(new MultipartFile("", file));
         return this;
     }
