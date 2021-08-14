@@ -17,6 +17,7 @@ import java.util.Map;
 
 /**
  * netty生成http请求的代理类，实现了Java代理接口、自定义的builder接口
+ * 通过builder模式构建NettyProxy对象
  */
 public class NettyProxy implements InvocationHandler, RequestBuilder {
     private String baseUrl = "";
@@ -31,7 +32,7 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
     }
 
     /**
-     * 对实例化接口的方法的代理操作，根据注解和参数，生成一个netty HTTP请求
+     * 对被代理的接口的方法的操作，根据注解和参数，生成一个netty HTTP请求
      * @param proxy 代理，实现了InvocationHandler接口
      * @param method 被调用的方法
      * @param args 实际参数
@@ -123,7 +124,7 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
      * @param args 参数
      * @throws Exception 解析过程中出现的异常
      */
-    private void parseArgs(Method method, Object[] args) throws Throwable{
+    private void parseArgs(Method method, Object[] args) throws ParamException{
         Annotation[][] annotations = method.getParameterAnnotations();
         StringBuilder url = new StringBuilder(requestUrl.get());
         for(int i = 0 ; i < args.length; i++) {
@@ -160,9 +161,12 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
 
             //上传一个文件
             if(annotation instanceof Upload) {
+                if(!(args[i] instanceof File)) {
+                    throw  new ParamException("The parameter is not a \"File\"");
+                }
                 String name = ((Upload)annotation).value();
                 try {
-                    File file = (java.io.File) args[i];
+                    File file = (File) args[i];
                     nettyRequest.addMultipart(name, file);
                 } catch (ClassCastException e) {
                     throw new ParamException("The parameter is not \"File\" class.");
@@ -171,6 +175,9 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
 
             //上传一个或多个文件
             if(annotation instanceof Uploads) {
+                if(!(args[i] instanceof File[])) {
+                    throw  new ParamException("The parameter is not a \"File\" array");
+                }
                 String[] name = ((Uploads)annotation).value();
                 File[] files = (File[]) args[i];
                 //直接上传，参数名为空
@@ -180,7 +187,7 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
                     }
                 } else {
                     if(name.length < files.length) {
-                        throw new ParamException("missing parameters");
+                        throw new ParamException("missing request parameters");
                     }
                     for (int j = 0; j < name.length; j++) {
                         nettyRequest.addMultipart(name[i], files[i]);
