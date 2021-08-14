@@ -25,7 +25,7 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
     private NettyRequest<?> nettyRequest;
     private final ThreadLocal<String> requestUrl = new InheritableThreadLocal<>();
     private boolean isMultipart = false;
-    private boolean isRegistered = false;
+    private boolean isBound = false;
     public NettyProxy() {
 
     }
@@ -205,20 +205,24 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
      * @param type 需要实例化的接口的类型
      * @return 经处理后的代理类型，代理类型是动态生成的，JVM也不知道其实际类型，不能够进行序列化
      */
-    public Object create(Class<?> type) throws NettyProxyException{
+    public Object bind(Class<?> type) throws NettyProxyException{
 
-        if(isRegistered) {
-            throw new NettyProxyException("This NettyProxy has been registered");
+        if(isBound) {
+            throw new NettyProxyException("This NettyProxy has been bound");
         } else {
             parseClassAnnotation(type);
-            this.isRegistered = true;
+            this.isBound = true;
             //使用Proxy类来创建对象，能够拦截对象的方法调用
             return Proxy.newProxyInstance(NettyProxy.class.getClassLoader(), new Class[]{type}, this);
         }
 
     }
 
-    public void parseClassAnnotation(Class<?> type) {
+    /**
+     * 解析接口类上的注解
+     * @param type 需要被代理的接口类
+     */
+    private void parseClassAnnotation(Class<?> type) {
         //解析接口类上的请求路径注解，并添加到baseUrl中
         if (type.isAnnotationPresent(RequestMapping.class)) {
             this.baseUrl = this.baseUrl + type.getAnnotation(RequestMapping.class).value();

@@ -1,7 +1,6 @@
 package test;
 
 
-import annotation.header.Header;
 import annotation.mapping.RequestMapping;
 import annotation.param.Upload;
 import annotation.method.Post;
@@ -55,7 +54,7 @@ public class Main {
     public void test() throws Exception{
         NettyProxy nettyProxy = new NettyProxy();
         nettyProxy.baseUrl("http://localhost:8080");
-        FileService fileService = (FileService) nettyProxy.create(FileService.class);
+        FileService fileService = (FileService) nettyProxy.bind(FileService.class);
 
         java.io.File file = new java.io.File("C:/Users/coura/Pictures/AGM森蚺2.jpg");
         System.out.println(file.getName());
@@ -78,7 +77,7 @@ public class Main {
         stop();*/
         nettyProxy = new NettyProxy();
         nettyProxy.baseUrl("http://localhost:8080");
-        MultiService multiService = (MultiService) nettyProxy.create(MultiService.class);
+        MultiService multiService = (MultiService) nettyProxy.bind(MultiService.class);
 
         NettyRequest<String> nettyRequest = multiService.upload(file);
         nettyRequest.requestAsync(new HttpCallback<String>() {
