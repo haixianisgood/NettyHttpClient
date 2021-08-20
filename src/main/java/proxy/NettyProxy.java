@@ -209,6 +209,7 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
         if(isBound) {
             throw new NettyProxyException("This NettyProxy has been bound");
         } else {
+            //bind的时候，同时解析接口类的注解，避免每次都解析，以减少性能开心
             parseClassAnnotation(type);
             this.isBound = true;
             //使用Proxy类来创建对象，能够拦截对象的方法调用
