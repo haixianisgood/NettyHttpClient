@@ -41,7 +41,7 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
      */
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) {
-        requestUrl.set("");
+        requestUrl.set(baseUrl);
 
         nettyRequest = new NettyRequest<>();
         nettyRequest.codec(codec)
