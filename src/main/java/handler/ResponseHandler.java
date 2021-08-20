@@ -30,6 +30,7 @@ public class ResponseHandler<T> extends ChannelInboundHandlerAdapter {
         this.callback = callback;
         this.resultType = resultType;
     }
+
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         if(!(msg instanceof FullHttpResponse)) {
@@ -38,7 +39,7 @@ public class ResponseHandler<T> extends ChannelInboundHandlerAdapter {
         }
 
         FullHttpResponse httpResponse = (FullHttpResponse) msg;
-        //编码失败，HTTP报文错误
+        //解码失败，HTTP报文错误
         if(httpResponse.decoderResult().isFailure()) {
             onFailed(httpResponse.status().code(),
                     httpResponse.status().reasonPhrase(),
@@ -51,10 +52,9 @@ public class ResponseHandler<T> extends ChannelInboundHandlerAdapter {
             String content = httpResponse.content().toString(StandardCharsets.UTF_8);
             //System.out.println("request success");
             onSuccess(content);
-            ctx.channel().closeFuture();
         } else {
             onFailed(httpResponse.status().code(),
-                    httpResponse.status().reasonPhrase(),
+                    "failed "+httpResponse.status().code()+" : "+httpResponse.status().reasonPhrase(),
                     new Exception(httpResponse.status().reasonPhrase()));
         }
         httpResponse.content().release();
@@ -79,6 +79,4 @@ public class ResponseHandler<T> extends ChannelInboundHandlerAdapter {
     private void onFailed(int code, String info, Exception e) {
         callback.onFailed(code, info, e);
     }
-
-
 }

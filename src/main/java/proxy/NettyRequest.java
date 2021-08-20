@@ -38,7 +38,10 @@ public class NettyRequest<T> implements Request<T> {
     private ChannelInitializer<SocketChannel> initializer;
     private final ByteBuf content = PooledByteBufAllocator.DEFAULT.directBuffer();
     private HttpCallback<T> httpCallback;
+
+    //即泛型参数T的实际类型
     private Type resultType;
+
     private JsonCodec codec = new GsonCodec();
     private final List<MultipartFile> multipartFiles = new ArrayList<>();
     private final List<MultipartBody> multipartBodies = new ArrayList<>();
@@ -60,7 +63,7 @@ public class NettyRequest<T> implements Request<T> {
             if (future.isSuccess()) {
                 pipeline.writeAndFlush(httpRequest);
             } else {
-                httpCallback.onFailed(404, "can not connect", new Exception("can not connect"));
+                httpCallback.onFailed(404, "404:can not connect", new Exception("can not connect"));
             }
         });
         f.channel().closeFuture();

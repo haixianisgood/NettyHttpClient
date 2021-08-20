@@ -40,7 +40,7 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
      * @throws Throwable 可能抛出的异常
      */
     @Override
-    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+    public Object invoke(Object proxy, Method method, Object[] args) {
         requestUrl.set("");
 
         nettyRequest = new NettyRequest<>();
@@ -55,14 +55,6 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
         Type resultType = ((ParameterizedType)type).getActualTypeArguments()[0];
         //设置实际结果的返回类型
         nettyRequest.resultType(resultType);
-
-        //解析类的注解，获取URL路径
-        if(method.getDeclaringClass().isAnnotationPresent(RequestMapping.class)) {
-            requestUrl.set(baseUrl+method.getDeclaringClass().getAnnotation(RequestMapping.class).value());
-        } else {
-            return null;
-        }
-
 
         //解析被调用的方法上的注解，确定请求方法
         for (Annotation annotation : method.getAnnotations()) {
@@ -122,7 +114,7 @@ public class NettyProxy implements InvocationHandler, RequestBuilder {
      * 解析HTTP请求参数
      * @param method 被调用的接口方法
      * @param args 参数
-     * @throws Exception 解析过程中出现的异常
+     * @throws ParamException 解析过程中出现的参数异常
      */
     private void parseArgs(Method method, Object[] args) throws ParamException{
         Annotation[][] annotations = method.getParameterAnnotations();

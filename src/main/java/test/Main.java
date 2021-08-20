@@ -58,7 +58,7 @@ public class Main {
 
         java.io.File file = new java.io.File("C:/Users/coura/Pictures/AGM森蚺2.jpg");
         System.out.println(file.getName());
-        /*LoginModel loginModel = new LoginModel();
+        LoginModel loginModel = new LoginModel();
         loginModel.setAccount("123");
         loginModel.setPassword("123");
         NettyRequest<Response<Rsp>> request = fileService.login(loginModel);
@@ -74,8 +74,8 @@ public class Main {
             }
         });
 
-        stop();*/
-        nettyProxy = new NettyProxy();
+        stop();
+        /*nettyProxy = new NettyProxy();
         nettyProxy.baseUrl("http://localhost:8080");
         MultiService multiService = (MultiService) nettyProxy.bind(MultiService.class);
 
@@ -95,7 +95,7 @@ public class Main {
                 System.out.println(code+":"+message);
             }
         });
-        stop();
+        stop();*/
 
     }
     public void stop() {
